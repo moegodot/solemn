@@ -1,0 +1,12 @@
+[project]
+name = "solemn-fonts"
+version = "0.1.0"
+description = "Fetch minimal upstream font sources for a Sarasa Mono SC build."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "afdko>=5.0.0",
+]
+
+[tool.uv]
+package = false

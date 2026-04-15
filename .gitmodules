@@ -1,0 +1,6 @@
+[submodule "vendor/Sarasa-Gothic"]
+	path = vendor/Sarasa-Gothic
+	url = https://github.com/be5invis/Sarasa-Gothic.git
+	branch = main
+	shallow = true
+	ignore = dirty

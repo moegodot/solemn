@@ -1,0 +1,98 @@
+diff --git a/config.json b/config.json
+index 31b4dd9..19119a1 100644
+--- a/config.json
++++ b/config.json
+@@ -1,6 +1,6 @@
+ {
+ 	"buildOptions": {},
+-	"familyOrder": ["Gothic", "Ui", "Mono", "MonoSlab", "Term", "TermSlab", "Fixed", "FixedSlab"],
++	"familyOrder": ["Mono"],
+ 	"families": {
+ 		"Gothic": {
+ 			"isGothic": true,
+@@ -104,18 +104,7 @@
+ 			}
+ 		}
+ 	},
+-	"styleOrder": [
+-		"ExtraLight",
+-		"ExtraLightItalic",
+-		"Light",
+-		"LightItalic",
+-		"Regular",
+-		"Italic",
+-		"SemiBold",
+-		"SemiBoldItalic",
+-		"Bold",
+-		"BoldItalic"
+-	],
++	"styleOrder": ["Regular", "Italic", "Bold", "BoldItalic"],
+ 	"latinGroups": {
+ 		"Inter": {
+ 			"isCff": false,
+@@ -182,7 +171,7 @@
+ 			"uprightStyleMap": "Bold"
+ 		}
+ 	},
+-	"subfamilyOrder": ["CL", "SC", "TC", "HC", "J", "K"],
++	"subfamilyOrder": ["SC"],
+ 	"os2encodings": {
+ 		"J": {
+ 			"gbk": false,
+diff --git a/verdafile.mjs b/verdafile.mjs
+index 4d4c99a..7d7cb75 100644
+--- a/verdafile.mjs
++++ b/verdafile.mjs
+@@ -16,7 +16,7 @@ const { FileList } = build.predefinedFuncs;
+ const PREFIX = `Sarasa`;
+ const BUILD = `.build`;
+ const OUT = `out`;
+-const SOURCES = `sources`;
++const SOURCES = process.env.SARASA_SOURCES_DIR || `sources`;
+ const PROJECT_ROOT = url.fileURLToPath(new URL(".", import.meta.url));
+ 
+ // Command line
+@@ -212,10 +212,17 @@ const BreakShsTtc = task.make(
+ const ShsTtf = file.make(
+ 	(region, weight) => `${BUILD}/shs/${region}-${weight}.ttf`,
+ 	async (t, out, region, weight) => {
+-		const [config] = await t.need(Config, BreakShsTtc(weight));
++		const [config] = await t.need(Config);
+ 		const shsSourceMap = config.shsSourceMap;
+ 		const shsPrefix = shsSourceMap.region[region];
+ 		const shsSuffix = shsSourceMap.styleMap[weight] || weight;
++		const directSource = `${SOURCES}/shs/${shsPrefix}-${shsSuffix}.otf`; // SOLEMN: direct Source Han Sans OTF input
++		if (await fs.pathExists(directSource)) {
++			const [, $1] = await t.need(de(out.dir), fu(directSource));
++			await run("otf2ttf", "-o", out.full, $1.full);
++			return;
++		}
++		await t.need(BreakShsTtc(weight));
+ 		const [, $1] = await t.need(de(out.dir), fu`${BUILD}/shs/${shsPrefix}-${shsSuffix}.otf`);
+ 		await run("otf2ttf", "-o", out.full, $1.full);
+ 	}
+@@ -322,7 +329,7 @@ const LatinSource = file.make(
+ 		const latinCfg = config.latinGroups[group] || {};
+ 		let sourceStyle = style;
+ 		const isCff = latinCfg.isCff;
+-		const sourceFile = `sources/${group}/${group}-${sourceStyle}` + (isCff ? ".otf" : ".ttf");
++		const sourceFile = `${SOURCES}/${group}/${group}-${sourceStyle}` + (isCff ? ".otf" : ".ttf");
+ 		const [source] = await t.need(fu(sourceFile));
+ 		if (isCff) {
+ 			await run("otf2ttf", "-o", out.full, source.full);
+@@ -401,6 +408,15 @@ const ProdUnhinted = file.make(
+ 		})
+ );
+ 
++const SolemnMonoSc = phony(`solemn-mono-sc`, async t => {
++	const [config] = await t.need(Config);
++	const styles = process.env.SOLEMN_BUILD_STYLES
++		? process.env.SOLEMN_BUILD_STYLES.split(",").filter(Boolean)
++		: config.styleOrder;
++	const prodT = process.env.SOLEMN_HINTED === "1" ? Prod : ProdUnhinted;
++	await t.need(styles.map(style => prodT("Mono", "SC", style)));
++});
++
+ async function MakeProd(t, out, family, region, style, fragT) {
+ 	const [config] = await t.need(Config, Scripts, de(out.dir));
+ 	const version = await t.need(Version);
