@@ -40,16 +40,18 @@ patch to `vendor/Sarasa-Gothic` before invoking Verda.
 
 The build command checks for `node` and `npm`. It gets AFDKO's `otf2ttf` and
 `otc2otf` from the uv dependency environment, downloads `ttfautohint` 1.8.4
-into `.cache/solemn-fonts/tools` when it is not already on PATH, runs
+into `.cache/solemn-fonts/tools` when it is not already on PATH, checks `zstd`, runs
 `npm install` in the Sarasa checkout, points Sarasa at
 `.cache/solemn-fonts/sources`, and then asks Verda for only these
 default targets:
 
-- `out/TTF-Unhinted/SarasaMonoSC-Regular.ttf`
-- `out/TTF-Unhinted/SarasaMonoSC-Italic.ttf`
-- `out/TTF-Unhinted/SarasaMonoSC-Bold.ttf`
-- `out/TTF-Unhinted/SarasaMonoSC-BoldItalic.ttf`
+- `out/TTF/SarasaMonoSC-Regular.ttf`
+- `out/TTF/SarasaMonoSC-Italic.ttf`
+- `out/TTF/SarasaMonoSC-Bold.ttf`
+- `out/TTF/SarasaMonoSC-BoldItalic.ttf`
 
 Use `--all-styles` to build every Sarasa Mono style, or `--styles Regular Bold`
-to pick an explicit subset. Use `--hinted` only when you really need hinted
-TTFs; Sarasa's hinted path is much heavier.
+to pick an explicit subset. The build always produces hinted TTFs.
+
+After a successful build, the helper copies the four default TTFs into
+`release/` and runs `release/pack.sh` to refresh `release/release.tar.zstd`.

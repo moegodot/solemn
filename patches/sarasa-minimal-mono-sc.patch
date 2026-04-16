@@ -40,7 +40,7 @@ index 31b4dd9..19119a1 100644
  		"J": {
  			"gbk": false,
 diff --git a/verdafile.mjs b/verdafile.mjs
-index 4d4c99a..7d7cb75 100644
+index 4d4c99a..5a61e33 100644
 --- a/verdafile.mjs
 +++ b/verdafile.mjs
 @@ -16,7 +16,7 @@ const { FileList } = build.predefinedFuncs;
@@ -80,7 +80,7 @@ index 4d4c99a..7d7cb75 100644
  		const [source] = await t.need(fu(sourceFile));
  		if (isCff) {
  			await run("otf2ttf", "-o", out.full, source.full);
-@@ -401,6 +408,15 @@ const ProdUnhinted = file.make(
+@@ -401,6 +408,14 @@ const ProdUnhinted = file.make(
  		})
  );
  
@@ -89,10 +89,53 @@ index 4d4c99a..7d7cb75 100644
 +	const styles = process.env.SOLEMN_BUILD_STYLES
 +		? process.env.SOLEMN_BUILD_STYLES.split(",").filter(Boolean)
 +		: config.styleOrder;
-+	const prodT = process.env.SOLEMN_HINTED === "1" ? Prod : ProdUnhinted;
-+	await t.need(styles.map(style => prodT("Mono", "SC", style)));
++	await t.need(styles.map(style => Prod("Mono", "SC", style)));
 +});
 +
  async function MakeProd(t, out, family, region, style, fragT) {
  	const [config] = await t.need(Config, Scripts, de(out.dir));
  	const version = await t.need(Version);
+@@ -432,9 +447,9 @@ const JHint = oracle("hinting-jobs", async () => os.cpus().length);
+ const GroupHintStyleList = computed(`group-hint-style-list`, async t => {
+ 	const [config] = await t.need(Config);
+ 	const results = [];
+-	for (const style in config.styles) {
+-		if (config.styles[style].uprightStyleMap) continue;
+-		await results.push(style);
++	for (const style of config.styleOrder) {
++		const weight = deItalizedNameOf(config, style);
++		if (!results.includes(weight)) results.push(weight);
+ 	}
+ 	return results;
+ });
+@@ -447,6 +462,7 @@ const GroupHintSelfPass1 = file.make(
+ 		const hd = HintingDeps(config, weight);
+ 
+ 		await t.need(hd.pass1Deps);
++		await t.need(HintDirs(hd.pass1Params));
+ 		await run(
+ 			Chlorophytum,
+ 			`hint`,
+@@ -464,6 +480,7 @@ const GroupHintSelfFe = file.make(
+ 		const [hintCfg] = await t.need(fu`hcfg/${weight}.json`);
+ 		const hd = HintingDeps(config, weight);
+ 		await t.need(hd.haniDeps, hd.hangDeps);
++		await t.need(HintDirs(hd.haniParams), HintDirs(hd.hangParams));
+ 		await run(
+ 			Chlorophytum,
+ 			`hint`,
+@@ -614,6 +631,14 @@ function* HintParams(items) {
+ 		yield [input, hgz];
+ 	}
+ }
++function HintDirs(items) {
++	const dirs = [];
++	for (const [, hgz, hfo] of items) {
++		dirs.push(de(path.dirname(hgz)));
++		dirs.push(de(path.dirname(hfo)));
++	}
++	return dirs;
++}
+ 
+ ///////////////////////////////////////////////////////////////////////////////////////////////////
+ // TTC building

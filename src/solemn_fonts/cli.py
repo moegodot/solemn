@@ -23,6 +23,7 @@ DEFAULT_SARASA_ROOT = PROJECT_ROOT / "vendor" / "Sarasa-Gothic"
 DEFAULT_CACHE_DIR = PROJECT_ROOT / ".cache" / "solemn-fonts"
 DEFAULT_SOURCES_SUBDIR = "sources"
 SARASA_PATCH_PATH = PROJECT_ROOT / "patches" / "sarasa-minimal-mono-sc.patch"
+DEFAULT_RELEASE_DIR = PROJECT_ROOT / "release"
 
 IOSEVKA_STYLES = (
     "ExtraLight",
@@ -179,7 +180,6 @@ def build_parser() -> argparse.ArgumentParser:
     build.add_argument("--style-set", default="SS17", help="Iosevka style set to fetch, default: SS17")
     build.add_argument("--styles", nargs="+", default=list(DEFAULT_BUILD_STYLES), choices=IOSEVKA_STYLES)
     build.add_argument("--all-styles", action="store_true", help="build every Sarasa Mono style")
-    build.add_argument("--hinted", action="store_true", help="build hinted TTFs; this is much heavier")
     build.add_argument("--skip-download", action="store_true", help="do not fetch missing source archives")
     build.add_argument("--skip-npm-install", action="store_true", help="do not run npm install")
     build.add_argument("--skip-tool-checks", action="store_true", help="skip external tool checks")
@@ -234,17 +234,16 @@ def cmd_build(args: argparse.Namespace) -> int:
     cache_dir = args.cache_dir.resolve()
     sources_dir = resolve_sources_dir(cache_dir, args.sources_dir)
     styles = list(IOSEVKA_STYLES if args.all_styles else args.styles)
-    targets = build_targets(styles, hinted=args.hinted)
+    targets = build_targets(styles)
     build_env = os.environ.copy()
     build_env["SOLEMN_BUILD_STYLES"] = ",".join(styles)
-    build_env["SOLEMN_HINTED"] = "1" if args.hinted else "0"
     build_env["SARASA_SOURCES_DIR"] = str(sources_dir)
 
     ensure_sarasa_checkout(sarasa_root)
     print("build plan:")
     print(f"  Sarasa root: {sarasa_root}")
     print(f"  styles: {', '.join(styles)}")
-    print(f"  output: {'hinted TTF' if args.hinted else 'unhinted TTF'}")
+    print("  output: hinted TTF")
     for target in targets:
         print(f"  target: {target}")
 
@@ -254,7 +253,6 @@ def cmd_build(args: argparse.Namespace) -> int:
         if tool_path is not None:
             prepend_path(build_env, tool_path.parent)
         check_external_tools(
-            hinted=args.hinted,
             env=build_env,
             dry_run=args.dry_run,
             assumed_tools=assumed_tools,
@@ -295,16 +293,44 @@ def cmd_build(args: argparse.Namespace) -> int:
         run_command(["npm", "install"], cwd=sarasa_root, env=build_env, dry_run=args.dry_run)
 
     run_command(["npm", "run", "build", "--", "solemn-mono-sc"], cwd=sarasa_root, env=build_env, dry_run=args.dry_run)
+    sync_release_bundle(sarasa_root=sarasa_root, release_dir=DEFAULT_RELEASE_DIR, dry_run=args.dry_run)
     return 0
 
 
-def build_targets(styles: Iterable[str], hinted: bool) -> list[str]:
-    infix = "TTF" if hinted else "TTF-Unhinted"
-    return [f"out/{infix}/SarasaMonoSC-{style}.ttf" for style in styles]
+def build_targets(styles: Iterable[str]) -> list[str]:
+    return [f"out/TTF/SarasaMonoSC-{style}.ttf" for style in styles]
+
+
+def release_targets() -> list[str]:
+    return build_targets(DEFAULT_BUILD_STYLES)
 
 
 def resolve_sources_dir(cache_dir: Path, requested: Path | None) -> Path:
     return (requested or cache_dir / DEFAULT_SOURCES_SUBDIR).resolve()
+
+
+def sync_release_bundle(sarasa_root: Path, release_dir: Path, dry_run: bool) -> None:
+    release_dir.mkdir(parents=True, exist_ok=True)
+    missing = []
+    for relative in release_targets():
+        built_font = sarasa_root / relative
+        if not built_font.exists():
+            missing.append(built_font)
+
+    if missing:
+        missing_paths = ", ".join(str(path) for path in missing)
+        raise RuntimeError(f"cannot update release bundle; missing built fonts: {missing_paths}")
+
+    for relative in release_targets():
+        built_font = sarasa_root / relative
+        dest = release_dir / built_font.name
+        if dry_run:
+            print(f"would copy {built_font} -> {dest}")
+        else:
+            shutil.copy2(built_font, dest)
+            print(f"copied {built_font.name} -> {dest}")
+
+    run_command(["sh", "pack.sh"], cwd=release_dir, env=os.environ.copy(), dry_run=dry_run)
 
 
 def ensure_sarasa_checkout(sarasa_root: Path) -> None:
@@ -317,14 +343,11 @@ def ensure_sarasa_checkout(sarasa_root: Path) -> None:
 
 
 def check_external_tools(
-    hinted: bool,
     env: dict[str, str],
     dry_run: bool,
     assumed_tools: set[str] | None = None,
 ) -> None:
-    required = ["node", "npm", "otf2ttf", "ttfautohint"]
-    if hinted:
-        required.append("otc2otf")
+    required = ["node", "npm", "otf2ttf", "otc2otf", "ttfautohint", "zstd"]
 
     assumed_tools = assumed_tools or set()
     missing: list[str] = []
@@ -511,6 +534,7 @@ def is_sarasa_patch_applied(sarasa_root: Path) -> bool:
         and "SARASA_SOURCES_DIR" in verdafile_text
         and SARASA_DIRECT_SHS_PATCH_MARKER in verdafile_text
         and "solemn-mono-sc" in verdafile_text
+        and "ProdUnhinted" not in verdafile_text.split("solemn-mono-sc", 1)[1].split("async function MakeProd", 1)[0]
     )
 
 
